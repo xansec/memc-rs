@@ -16,7 +16,6 @@ jobs:
     permissions:
       contents: write
       packages: write
-      repository-projects: write
     strategy:
       matrix:
         os: [ubuntu-latest]
