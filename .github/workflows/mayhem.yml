@@ -15,6 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       - packages: write
+        content: write
     strategy:
       matrix:
         os: [ubuntu-latest]
