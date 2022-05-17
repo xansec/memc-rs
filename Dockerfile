@@ -1,16 +1,23 @@
-# Create the build container to compile the hello world program
-FROM rust:latest as builder
-ENV USER root
-RUN mkdir /build
-COPY . /build
-WORKDIR /build
-RUN rustup target add x86_64-unknown-linux-musl
-RUN apt update && apt install -y musl-tools musl-dev
-RUN apt install gcc
-RUN cargo build --release --target=x86_64-unknown-linux-musl --features=jemallocator
+# Build Stage
+FROM ubuntu:20.04 as builder
 
-# Create the execution container by copying the compiled hello world to it and running it
-FROM scratch
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/memcrsd /memcrsd
-ENTRYPOINT [ "/memcrsd",  "-c", "50000", "-l", "0.0.0.0", "-v", "-m", "2048", "-I", "10m" ]
+## Install build dependencies.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y cmake clang curl git-all build-essential
+RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN ${HOME}/.cargo/bin/rustup default nightly
+RUN ${HOME}/.cargo/bin/cargo install -f cargo-fuzz
+#RUN mkdir memc-rs
+RUN git clone https://github.com/memc-rs/memc-rs.git
+WORKDIR /memc-rs
+COPY Mayhemfile Mayhemfile
+COPY fuzz_decode_binary.rs memcrs/fuzz/fuzz_targets/fuzz_decode_binary.rs
+COPY binary_codec.rs memcrs/src/protocol/binary_codec.rs
+WORKDIR /memc-rs/memcrs/fuzz
+RUN ${HOME}/.cargo/bin/cargo fuzz build
+WORKDIR /
 
+# Package Stage
+FROM ubuntu:20.04
+
+COPY --from=builder /memc-rs /memc-rs

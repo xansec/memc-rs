@@ -161,12 +161,36 @@ impl MemcacheBinaryCodec {
         }
     }
 
-    fn init_parser(&mut self) {
+    pub fn decoding(&mut self, src: &mut BytesMut) -> Result<Option<BinaryRequest>, io::Error> {
+        if self.state == RequestParserState::None {
+            if src.len() < MemcacheBinaryCodec::HEADER_LEN {
+                return Ok(None);
+            }
+            let result = self.parse_header(src);
+            match result {
+                Err(error) => return Err(error),
+                Ok(()) => {}
+            }
+        }
+
+        if self.header.body_length > self.item_size_limit {
+            let result = self.parse_item_too_large(src);
+            self.init_parser();
+            return result;
+        }
+
+        if (self.header.body_length as usize) > src.len() {
+            return Ok(None);
+        }
+        self.parse_request(src)
+    }
+
+    pub fn init_parser(&mut self) {
         self.header = Default::default();
         self.state = RequestParserState::None;
     }
 
-    fn parse_header(&mut self, src: &mut BytesMut) -> Result<(), io::Error> {
+    pub fn parse_header(&mut self, src: &mut BytesMut) -> Result<(), io::Error> {
         if src.len() < MemcacheBinaryCodec::HEADER_LEN {
             error!("Buffer len is less than MemcacheBinaryCodec::HEADER_LEN");
             return Err(Error::new(
@@ -201,7 +225,7 @@ impl MemcacheBinaryCodec {
         Ok(())
     }
 
-    fn header_valid(&self) -> bool {
+    pub fn header_valid(&self) -> bool {
         if self.header.magic != binary::Magic::Request as u8 {
             error!("Invalid header: magic != binary::Magic::Request");
             return false;
@@ -219,7 +243,7 @@ impl MemcacheBinaryCodec {
         true
     }
 
-    fn parse_request(&mut self, src: &mut BytesMut) -> Result<Option<BinaryRequest>, io::Error> {
+    pub fn parse_request(&mut self, src: &mut BytesMut) -> Result<Option<BinaryRequest>, io::Error> {
         if self.state != RequestParserState::HeaderParsed {
             error!("Incorrect parser state ({:?})", self.state);
             return Err(Error::new(ErrorKind::Other, "Header is not parsed"));
