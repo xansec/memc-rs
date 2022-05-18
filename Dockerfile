@@ -1,23 +1,16 @@
 # Build Stage
-FROM ubuntu:20.04 as builder
+FROM rust as builder
 
-## Install build dependencies.
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y cmake clang curl git-all build-essential
-RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN ${HOME}/.cargo/bin/rustup default nightly
-RUN ${HOME}/.cargo/bin/cargo install -f cargo-fuzz
-#RUN mkdir memc-rs
-RUN git clone https://github.com/memc-rs/memc-rs.git
-WORKDIR /memc-rs
-COPY Mayhemfile Mayhemfile
-COPY fuzz_decode_binary.rs memcrs/fuzz/fuzz_targets/fuzz_decode_binary.rs
-COPY binary_codec.rs memcrs/src/protocol/binary_codec.rs
+RUN rustup update nightly && \
+    rustup default nightly && \
+    cargo install cargo-fuzz
+
+RUN mkdir memc-rs
+ADD . /memc-rs
 WORKDIR /memc-rs/memcrs/fuzz
-RUN ${HOME}/.cargo/bin/cargo fuzz build
-WORKDIR /
+RUN cargo fuzz build
 
 # Package Stage
 FROM ubuntu:20.04
 
-COPY --from=builder /memc-rs /memc-rs
+COPY --from=builder /memc-rs/memcrs/fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_binary_decoder /
